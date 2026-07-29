@@ -121,3 +121,12 @@ class Device:
         device = device_class(uri=uri, **kwargs)
         device.connect()
         return device
+
+    @classmethod
+    def auto_detect(cls, hints: Optional[List[str]] = None, suppress_errors: bool = True) -> Optional[BaseDevice]:
+        """
+        Alias for auto_connect(). Scans all protocols and connects to the first available device.
+        :param hints: Limit search to specific protocols (e.g., ['uart', 'ble']).
+        :param suppress_errors: Suppress warnings for unavailable protocols (default: True).
+        """
+        return cls.auto_connect(hints=hints, suppress_errors=suppress_errors)

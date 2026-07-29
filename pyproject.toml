@@ -1,12 +1,12 @@
 [project]
 name = "autoserial"
-version = "0.1.0"
+version = "0.2.0"
 description = "A universal, cross-platform hardware communication library for UART, SPI, I2C, CAN, BLE, USB HID, MQTT, and Network protocols."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "AUTOserial Contributors" }
+    { name = "Vidath101" }
 ]
 keywords = ["serial", "uart", "spi", "i2c", "can", "ble", "bluetooth", "hid", "mqtt", "hardware", "embedded"]
 classifiers = [

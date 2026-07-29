@@ -51,6 +51,24 @@ class UARTDevice(BaseDevice):
         
         return self._serial.write(data)
 
+    def _reset(self) -> None:
+        """Toggle DTR line to trigger a hardware reset (works on Arduino, ESP boards)."""
+        if self._serial:
+            self._serial.dtr = False
+            import time; time.sleep(0.1)
+            self._serial.dtr = True
+
+    def info(self):
+        base = super().info()
+        if self._serial:
+            base.update({
+                "baudrate":  self._serial.baudrate,
+                "bytesize":  self._serial.bytesize,
+                "parity":    self._serial.parity,
+                "stopbits":  self._serial.stopbits,
+            })
+        return base
+
     @classmethod
     def list_devices(cls) -> List[Dict[str, Any]]:
         ports = serial.tools.list_ports.comports()

@@ -1,72 +1,139 @@
 # AUTOserial
 
-`AUTOserial` is a universal, cross-platform Python library that simplifies hardware communication. It abstracts away the specific details of different protocols (UART, SPI, I²C, USB HID, CAN, BLE, TCP/UDP, MQTT) behind a single, consistent API. 
-
-With `AUTOserial`, you can easily list available devices, auto-connect to them, and read/write data without worrying about the underlying protocol implementations.
+`AUTOserial` is a universal, cross-platform Python library that simplifies hardware communication. It abstracts away the specific details of different protocols (UART, SPI, I²C, USB HID, CAN, BLE, TCP/UDP, MQTT) behind a single, consistent API — with namespaced sub-interfaces for serial, GPIO, and firmware flashing.
 
 ## Features
-- **Unified API**: One `read()`, `write()`, and `monitor()` interface for all protocols.
+- **Unified API**: One `device` object works across all protocols.
+- **Sub-interfaces**: Clean namespaced access via `device.serial`, `device.gpio`, `device.flash`.
+- **Auto-Detection**: `Device.auto_detect()` and `Device.list()` scan all protocols automatically.
 - **Cross-Platform**: Supports Windows, Linux, and macOS.
-- **Auto-Detection**: Smart `list()` and `auto_connect()` capabilities to find hardware on the fly.
-- **Extensive Protocol Support**: UART, SPI, I²C, USB HID, CAN, Bluetooth Low Energy (BLE), TCP/UDP, and MQTT.
+- **Firmware Flashing**: Auto-selects `esptool`, `avrdude`, `uf2`, or `dfu-util` based on file extension.
+- **Silent Mode**: `suppress_errors=True` silences warnings for unavailable protocols.
+- **Extensive Protocol Support**: UART, SPI, I²C, USB HID, CAN, BLE, TCP/UDP, MQTT.
 
 ## Installation
 
-You can install `AUTOserial` via pip (note the package name is lowercase):
+Install via pip (package name is lowercase):
 
 ```bash
 pip install autoserial
 ```
 
-Or, if you're using `uv`:
+Or with `uv`:
 
 ```bash
 uv add autoserial
 ```
 
-*Note: Since this library covers a wide range of protocols, it will install dependencies like `pyserial`, `hidapi`, `bleak`, `python-can`, `paho-mqtt`, and `pyftdi`.*
+*Installs: `pyserial`, `hidapi`, `bleak`, `python-can`, `paho-mqtt`, `pyftdi`.*
+
+---
 
 ## Quickstart
 
-The easiest way to get started is by letting `AUTOserial` auto-detect and connect to your device.
-
 ```python
 from autoserial import Device
-import time
 
-def on_data_received(data):
-    print(f"Received data: {data}")
+# Auto-detect and connect to the first available hardware device
+device = Device.auto_detect()
 
-# List all discovered devices on all protocols
-print("Available devices:", Device.list())
+# Get device metadata
+print(device.info())
+# {'uri': 'COM3', 'protocol': 'uart', 'connected': True, 'platform': 'Windows', ...}
 
-# Automatically connect to the first available UART or USB HID device
-device = Device.auto_connect(hints=['uart', 'usb_hid'])
+# Serial communication
+device.serial.write(b"Hello Hardware!\n")
+response = device.serial.read(size=64, timeout=1.0)
 
-if device:
-    print(f"Connected to {device.protocol} device at {device.uri}")
-    
-    # Write data
-    device.write(b"Hello Hardware!\n")
-    
-    # Read data directly
-    response = device.read(size=64, timeout=1.0)
-    print("Response:", response)
+# Background serial monitor (prints to stdout)
+device.serial.monitor()
 
-    # Or start background monitoring
-    device.monitor(on_data_received)
-    time.sleep(5)
-    device.stop_monitoring()
-    
-    # Clean up
-    device.disconnect()
-else:
-    print("No devices found.")
+# GPIO control
+device.gpio.mode(12, "OUTPUT")
+device.gpio.high(12)
+device.gpio.low(12)
+device.gpio.pwm(9, frequency=1000, duty=50)
+
+# Reset the device (DTR toggle on UART, Ctrl-D on others)
+device.reset()
+
+# Flash firmware — tool is auto-selected by file extension
+device.flash.flash("firmware.bin")   # ESP32  → esptool
+device.flash.flash("firmware.hex")   # Arduino → avrdude
+device.flash.flash("firmware.uf2")   # RP2040  → USB drag-and-drop
+device.flash.flash("firmware.dfu")   # STM32   → dfu-util
+
+device.disconnect()
 ```
+
+---
+
+## API Reference
+
+### `Device` (Factory class)
+
+| Method | Description |
+|---|---|
+| `Device.auto_detect(hints, suppress_errors)` | Scan all protocols and connect to the first device found. |
+| `Device.auto_connect(hints, suppress_errors)` | Alias for `auto_detect()`. |
+| `Device.list(hints, suppress_errors)` | Return a list of all detected devices across protocols. |
+| `Device.connect(protocol, uri, **kwargs)` | Explicitly connect to a device by protocol and URI. |
+
+### `device` (Connected device instance)
+
+| Method / Property | Description |
+|---|---|
+| `device.info()` | Returns a dict with `uri`, `protocol`, `connected`, `platform`, `class`. |
+| `device.reset()` | Resets the hardware (DTR toggle on UART, Ctrl-D elsewhere). |
+| `device.read(size, timeout)` | Read raw bytes from the transport. |
+| `device.write(data)` | Write bytes to the transport. |
+| `device.monitor(callback)` | Start background monitoring thread. |
+| `device.stop_monitoring()` | Stop the background monitor. |
+| `device.serial` | Serial sub-interface. |
+| `device.gpio` | GPIO sub-interface. |
+| `device.flash` | Flash sub-interface. |
+
+### `device.serial`
+
+| Method | Description |
+|---|---|
+| `.read(size, timeout)` | Read raw bytes. |
+| `.readline(timeout)` | Read until newline. |
+| `.write(data)` | Write bytes or string. |
+| `.monitor(callback)` | Start background monitor (prints to stdout if no callback). |
+| `.stop_monitoring()` | Stop background monitor. |
+| `.lines(timeout)` | Generator yielding decoded lines from the device. |
+
+### `device.gpio`
+
+| Method | Description |
+|---|---|
+| `.mode(pin, direction)` | Set pin mode: `'INPUT'`, `'OUTPUT'`, `'INPUT_PULLUP'`. |
+| `.high(pin)` | Set pin HIGH. |
+| `.low(pin)` | Set pin LOW. |
+| `.toggle(pin)` | Toggle pin state. |
+| `.read(pin)` | Read pin state — returns raw response string. |
+| `.pwm(pin, frequency, duty)` | Start PWM. `duty` is 0–100 (%). |
+| `.pwm_stop(pin)` | Stop PWM on a pin. |
+
+### `device.flash`
+
+| Method | Description |
+|---|---|
+| `.flash(firmware_path, **kwargs)` | Flash firmware. Tool auto-selected by extension. |
+
+| Extension | Tool | Target |
+|---|---|---|
+| `.bin` | `esptool` | ESP32 / ESP8266 |
+| `.hex` | `avrdude` | Arduino / AVR |
+| `.uf2` | USB copy | RP2040 / CircuitPython |
+| `.dfu` | `dfu-util` | STM32 and others |
+
+---
 
 ## Supported Protocols
 
-| Protocol | Hint | Connection URI Example | Backend Library |
+| Protocol | Hint | Connection URI Example | Backend |
 |---|---|---|---|
 | **UART** | `'uart'` | `COM3`, `/dev/ttyUSB0` | `pyserial` |
 | **TCP/UDP** | `'network'` | `192.168.1.10:5000` | `socket` |
@@ -77,51 +144,55 @@ else:
 | **SPI** | `'spi'` | `ftdi://ftdi:232h/1` | `pyftdi` |
 | **I²C** | `'i2c'` | `ftdi://ftdi:232h/1` | `pyftdi` |
 
+---
+
 ## Advanced Usage
 
-If you don't want to use `auto_connect()`, you can explicitly create a device for a specific protocol.
-
-### Silencing Errors
-
-By default, `AUTOserial` will log warnings when a protocol fails to scan (e.g. Bluetooth is turned off). You can suppress all these logs with `suppress_errors=True`:
+### Suppress protocol errors (e.g. Bluetooth off)
 
 ```python
-from autoserial import Device
-
-# No warnings or errors will be printed, even if BLE is off or CAN is not available
 devices = Device.list(suppress_errors=True)
-device  = Device.auto_connect(suppress_errors=True)
+device  = Device.auto_detect(suppress_errors=True)
 ```
 
-### Connecting to a CAN bus
+### Explicit connection
 
 ```python
-from autoserial import Device
+# UART
+device = Device.connect(protocol='uart', uri='COM3', baudrate=115200)
 
-# Connect to a CAN interface (e.g. socketcan)
-can_device = Device.connect(protocol='can', uri='can0', bustype='socketcan', bitrate=500000)
-can_device.write(b"\x01\x02\x03") 
-msg = can_device.read(timeout=2.0)
-print(msg)
-can_device.disconnect()
-```
+# TCP
+device = Device.connect(protocol='network', uri='192.168.1.10:5000', protocol_type='tcp')
 
-### Connecting to a BLE Device
-
-```python
-from autoserial import Device
-
-ble_device = Device.connect(
-    protocol='ble', 
-    uri='24:71:89:cc:09:05', # MAC address or UUID
+# BLE
+device = Device.connect(
+    protocol='ble',
+    uri='24:71:89:cc:09:05',
     rx_char='00002a37-0000-1000-8000-00805f9b34fb',
-    tx_char='00002a38-0000-1000-8000-00805f9b34fb'
+    tx_char='00002a38-0000-1000-8000-00805f9b34fb',
 )
 
-ble_device.write(b"Start")
-print(ble_device.read(timeout=5.0))
-ble_device.disconnect()
+# CAN Bus
+device = Device.connect(protocol='can', uri='can0', bustype='socketcan', bitrate=500000)
 ```
+
+### Context manager (auto disconnect)
+
+```python
+with Device.connect(protocol='uart', uri='/dev/ttyUSB0') as device:
+    device.serial.write(b"ping\n")
+    print(device.serial.readline())
+```
+
+### Stream lines from a serial device
+
+```python
+device = Device.connect(protocol='uart', uri='COM3')
+for line in device.serial.lines(timeout=1.0):
+    print(line)
+```
+
+---
 
 ## Contributing
 Contributions are welcome! Please feel free to submit a Pull Request if you'd like to add support for a new hardware protocol or improve existing ones.
